@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     ai_model_name: str = "gemini-2.5-flash"
     cache_ttl_seconds: int = 3600
+    assistant_rate_limit_per_minute: int = 12
 
     @property
     def cors_origins_list(self) -> List[str]:

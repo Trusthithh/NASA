@@ -5,6 +5,7 @@ import {
   ComposedChart,
   Legend,
   Line,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -13,6 +14,8 @@ import {
 import { AlertTriangle, Award, CheckCircle2, FileDown, Minus, TrendingDown, TrendingUp } from "lucide-react";
 import { InvestigationResponse } from "../../types/science";
 import { btnPrimary, card, subCard } from "../../styles/ui";
+import { DataQualityBadge } from "./DataQualityBadge";
+import { ChangePointCard, RecordsCard } from "./InsightPanels";
 
 interface InvestigationReportProps {
   data: InvestigationResponse;
@@ -79,6 +82,9 @@ export const InvestigationReport: React.FC<InvestigationReportProps> = ({ data }
             <h2 className="text-3xl font-extrabold tracking-tight text-white">{data.location_name}</h2>
             <p className="mt-1 font-medium text-slate-300">{data.variable_name}</p>
             <p className="mt-1 text-xs text-slate-400">{data.data_source}</p>
+            <div className="mt-3">
+              <DataQualityBadge quality={data.data_quality} />
+            </div>
           </div>
           <button onClick={exportCSV} className={`${btnPrimary} self-start md:self-auto`}>
             <FileDown className="h-4 w-4" />
@@ -124,6 +130,14 @@ export const InvestigationReport: React.FC<InvestigationReportProps> = ({ data }
                 formatter={(v) => (typeof v === "number" ? v.toFixed(3) : String(v))}
               />
               <Legend />
+              {data.change_point && data.change_point.is_significant && (
+                <ReferenceLine
+                  x={data.change_point.change_date}
+                  stroke="#a78bfa"
+                  strokeDasharray="4 4"
+                  label={{ value: `Change ${data.change_point.resolution === "monthly" ? data.change_point.change_date : data.change_point.change_year}`, fill: "#c4b5fd", fontSize: 11, position: "top" }}
+                />
+              )}
               <Bar dataKey="anomaly" name={`Anomaly (${unit})`} fill="#475569" opacity={0.6} />
               <Line type="monotone" dataKey="value" name={`Observed (${unit})`} stroke="#22d3ee" dot={false} strokeWidth={2} />
               <Line type="linear" dataKey="trend_value" name="Fitted Theil-Sen trend" stroke="#f59e0b" dot={false} strokeWidth={2} strokeDasharray="6 4" />
@@ -143,6 +157,9 @@ export const InvestigationReport: React.FC<InvestigationReportProps> = ({ data }
           ))}
         </ul>
       </div>
+
+      <ChangePointCard changePoint={data.change_point} unit={unit} />
+      <RecordsCard records={data.records} unit={unit} />
 
       {data.seasonal_insights.length > 0 && (
         <div className={card}>

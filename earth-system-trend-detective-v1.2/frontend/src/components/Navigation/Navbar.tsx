@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Globe2, Menu, ShieldAlert, Sparkles, TrendingUp, X } from "lucide-react";
+import { ArrowLeftRight, Globe2, Menu, ShieldAlert, Sparkles, TrendingUp, X } from "lucide-react";
 import { useSelectedLocation } from "../../context/LocationContext";
 import { investigateUrl } from "../../utils/geo";
 
@@ -21,6 +21,7 @@ export const Navbar: React.FC = () => {
       label: "Trend Analyser",
       icon: <TrendingUp className="h-4 w-4" />,
     },
+    { to: "/compare", label: "Compare", icon: <ArrowLeftRight className="h-4 w-4" /> },
     {
       to: "/environmental",
       label: "Environmental Challenges",
@@ -47,7 +48,7 @@ export const Navbar: React.FC = () => {
           </div>
         </Link>
 
-        <nav className="hidden items-center gap-7 md:flex">
+        <nav className="hidden items-center gap-6 lg:flex">
           {items.map((item) => (
             <Link key={item.label} to={item.to} className={linkClass(isActive(item))}>
               {item.icon}
@@ -57,13 +58,13 @@ export const Navbar: React.FC = () => {
         </nav>
 
         <div className="flex items-center gap-3">
-          <div className="hidden items-center gap-1.5 rounded-full border border-cyan-800/50 bg-cyan-950/60 px-3 py-1.5 font-mono text-xs text-cyan-300 lg:flex">
+          <div className="hidden items-center gap-1.5 rounded-full border border-cyan-800/50 bg-cyan-950/60 px-3 py-1.5 font-mono text-xs text-cyan-300 xl:flex">
             <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
             <span>NASA POWER / MERRA-2</span>
           </div>
           <button
             type="button"
-            className="rounded-lg p-2 text-slate-300 hover:bg-slate-800 md:hidden"
+            className="rounded-lg p-2 text-slate-300 hover:bg-slate-800 lg:hidden"
             onClick={() => setMenuOpen((o) => !o)}
             aria-label="Toggle menu"
             aria-expanded={menuOpen}
@@ -74,7 +75,7 @@ export const Navbar: React.FC = () => {
       </div>
 
       {menuOpen && (
-        <nav className="space-y-4 border-t border-slate-800 bg-[#050811] px-4 py-4 md:hidden">
+        <nav className="space-y-4 border-t border-slate-800 bg-[#050811] px-4 py-4 lg:hidden">
           {items.map((item) => (
             <Link key={item.label} to={item.to} className={linkClass(isActive(item))}>
               {item.icon}

@@ -25,45 +25,98 @@ class NasaPowerService:
     """Authentic Earth-science data from the NASA POWER REST API."""
 
     DATASET_MAPPING: Dict[str, Dict[str, Any]] = {
-        "temperature": {
-            "name": "MERRA-2 2 m Surface Air Temperature",
-            "nasa_variable": "T2M",
+        # --- Temperature -------------------------------------------------
+        "skin_temperature": {
+            "name": "MERRA-2 Earth Skin Temperature",
+            "nasa_variable": "TS",
             "community": "RE",
+            "category": "Temperature",
             "unit": "°C",
             "start_year": 1981,
             "source": "NASA POWER (MERRA-2 reanalysis, NASA GMAO)",
-            "limitation": "Reanalysis grid cell (~50 km) smooths local "
-            "microclimates, especially in complex terrain.",
+            "limitation": "Skin temperature is the radiating surface temperature, "
+            "not air temperature, and can differ from it by several degrees.",
         },
+        "dew_point": {
+            "name": "MERRA-2 2 m Dew Point Temperature",
+            "nasa_variable": "T2MDEW",
+            "community": "RE",
+            "category": "Temperature",
+            "unit": "°C",
+            "start_year": 1981,
+            "source": "NASA POWER (MERRA-2 reanalysis, NASA GMAO)",
+            "limitation": "Reflects near-surface moisture content; the ~50 km grid "
+            "smooths local humidity differences.",
+        },
+        # --- Water -------------------------------------------------------
         "precipitation": {
             "name": "MERRA-2 Bias-Corrected Precipitation",
             "nasa_variable": "PRECTOTCORR",
             "community": "RE",
+            "category": "Water",
             "unit": "mm/day",
             "start_year": 1981,
             "source": "NASA POWER (MERRA-2 corrected precipitation)",
-            "limitation": "Bias-corrected reanalysis product; localized "
-            "convective extremes may be smoothed.",
+            "limitation": "Monthly mean rate in mm/day (not a monthly total); "
+            "localized convective extremes may be smoothed.",
         },
         "soil_moisture": {
             "name": "MERRA-2 Root Zone Soil Wetness",
             "nasa_variable": "GWETROOT",
             "community": "RE",
+            "category": "Water",
             "unit": "fraction (0-1)",
             "start_year": 1981,
             "source": "NASA POWER (MERRA-2 land model)",
-            "limitation": "Modeled root-zone wetness, not direct "
+            "limitation": "Modeled root-zone wetness (about the top 1 m), not direct "
             "satellite radiometer soil moisture.",
+        },
+        "snow_fraction": {
+            "name": "MERRA-2 Snow Cover Fraction",
+            "nasa_variable": "FRSNO",
+            "community": "RE",
+            "category": "Water",
+            "unit": "fraction (0-1)",
+            "start_year": 1981,
+            "source": "NASA POWER (MERRA-2 land model)",
+            "limitation": "Zero year-round in most warm regions, so a trend is only "
+            "meaningful where snow normally occurs.",
+        },
+        # --- Atmosphere --------------------------------------------------
+        "specific_humidity": {
+            "name": "MERRA-2 2 m Specific Humidity",
+            "nasa_variable": "QV2M",
+            "community": "RE",
+            "category": "Atmosphere",
+            "unit": "g/kg",
+            "start_year": 1981,
+            "source": "NASA POWER (MERRA-2 reanalysis, NASA GMAO)",
+            "limitation": "Model-derived near-surface humidity; the ~50 km grid "
+            "smooths local conditions.",
         },
         "aerosol": {
             "name": "MERRA-2 Aerosol Optical Depth (550 nm)",
             "nasa_variable": "AOD_55",
             "community": "RE",
+            "category": "Atmosphere",
             "unit": "dimensionless",
             "start_year": 1981,
             "source": "NASA POWER (MERRA-2 aerosol reanalysis)",
-            "limitation": "Assimilated aerosol product; higher uncertainty "
-            "over bright snow and desert surfaces.",
+            "limitation": "Assimilated aerosol product; higher uncertainty over "
+            "bright snow and desert surfaces.",
+        },
+        # --- Energy ------------------------------------------------------
+        "clear_sky_solar": {
+            "name": "Clear-Sky Surface Shortwave Downward Irradiance",
+            "nasa_variable": "CLRSKY_SFC_SW_DWN",
+            "community": "RE",
+            "category": "Energy",
+            "unit": "kWh/m²/day",
+            "start_year": 1984,
+            "source_break_year": 2001,
+            "source": "NASA POWER (SRB 1984-2000, CERES SYN1deg from 2001)",
+            "limitation": "The underlying satellite product changes in 2001, which "
+            "can add a step to long trends. Clear-sky values exclude cloud effects.",
         },
     }
 

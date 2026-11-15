@@ -22,6 +22,8 @@ export interface GlobePoint {
 
 interface EarthGlobeProps {
   selected?: GlobePoint | null;
+  secondary?: GlobePoint | null; // optional second marker (blue), e.g. "Place B"
+  secondaryColor?: string;
   onPick?: (lat: number, lon: number) => void;
   heightClass?: string;
   distance?: number;
@@ -183,7 +185,7 @@ const CameraRig: React.FC<{ target: GlobePoint | null }> = ({ target }) => {
   return null;
 };
 
-const Marker: React.FC<{ point: GlobePoint }> = ({ point }) => {
+const Marker: React.FC<{ point: GlobePoint; color?: string }> = ({ point, color = "#fbbf24" }) => {
   const ring = useRef<THREE.Mesh>(null);
   const { position, quaternion } = useMemo(() => {
     const normal = latLonToVector(point.lat, point.lon, 1).normalize();
@@ -205,11 +207,11 @@ const Marker: React.FC<{ point: GlobePoint }> = ({ point }) => {
     <group position={position} quaternion={quaternion}>
       <mesh>
         <sphereGeometry args={[0.045, 16, 16]} />
-        <meshBasicMaterial color="#fbbf24" />
+        <meshBasicMaterial color={color} />
       </mesh>
       <mesh ref={ring}>
         <ringGeometry args={[0.07, 0.085, 48]} />
-        <meshBasicMaterial color="#fbbf24" transparent side={THREE.DoubleSide} depthWrite={false} />
+        <meshBasicMaterial color={color} transparent side={THREE.DoubleSide} depthWrite={false} />
       </mesh>
     </group>
   );
@@ -217,11 +219,13 @@ const Marker: React.FC<{ point: GlobePoint }> = ({ point }) => {
 
 interface GlobeMeshProps {
   selected: GlobePoint | null;
+  secondary: GlobePoint | null;
+  secondaryColor: string;
   onPick?: (lat: number, lon: number) => void;
   onHover: (point: GlobePoint | null) => void;
 }
 
-const GlobeMesh: React.FC<GlobeMeshProps> = ({ selected, onPick, onHover }) => {
+const GlobeMesh: React.FC<GlobeMeshProps> = ({ selected, secondary, secondaryColor, onPick, onHover }) => {
   const texture = useEarthTexture();
   const graticule = useMemo(() => buildGraticule(RADIUS * 1.002), []);
 
@@ -263,12 +267,15 @@ const GlobeMesh: React.FC<GlobeMeshProps> = ({ selected, onPick, onHover }) => {
         />
       </mesh>
       {selected && <Marker point={selected} />}
+      {secondary && <Marker point={secondary} color={secondaryColor} />}
     </group>
   );
 };
 
 export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   selected = null,
+  secondary = null,
+  secondaryColor = "#38bdf8",
   onPick,
   heightClass = "h-[500px] lg:h-[600px]",
   distance = 7.5,
@@ -291,7 +298,13 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
           <ambientLight intensity={1.15} />
           <directionalLight position={[5, 3, 5]} intensity={2.2} />
           <Stars radius={100} depth={50} count={3000} factor={4} saturation={0} fade />
-          <GlobeMesh selected={selected} onPick={onPick} onHover={handleHover} />
+          <GlobeMesh
+            selected={selected}
+            secondary={secondary}
+            secondaryColor={secondaryColor}
+            onPick={onPick}
+            onHover={handleHover}
+          />
           <CameraRig target={selected} />
           <OrbitControls
             enableZoom

@@ -1,12 +1,26 @@
-from typing import Any, Dict, List
+import asyncio
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 from scipy import stats
 
-from app.analysis.trends import compute_trend_analysis
+from app.analysis.compare import compare_series
+from app.analysis.correlation import correlate, interpret
+from app.analysis.quality import assess_quality
+from app.analysis.records import compute_records
+from app.analysis.trends import InsufficientDataError, compute_trend_analysis, decimal_year
 from app.models.schemas import (
     AnalysisRequest,
+    ChangePointResult,
+    CompareRequest,
+    CompareResponse,
+    CompareSummary,
+    CorrelationPoint,
+    CorrelationRequest,
+    CorrelationResponse,
+    DataQuality,
     InvestigationResponse,
+    RecordsResult,
     SeasonalInsight,
     StatisticalResult,
     TimeSeriesPoint,
@@ -65,7 +79,12 @@ def _fmt_p(p: float) -> str:
 
 
 def build_findings(
-    meta: Dict[str, Any], place: str, req: AnalysisRequest, st: StatisticalResult
+    meta: Dict[str, Any],
+    place: str,
+    req: AnalysisRequest,
+    st: StatisticalResult,
+    cp: Optional[ChangePointResult],
+    rec: RecordsResult,
 ) -> List[str]:
     unit = meta["unit"]
     per_decade = st.sen_slope * 10.0
@@ -102,6 +121,33 @@ def build_findings(
         )
     else:
         findings.append("No significant serial correlation was detected in the residuals.")
+
+    if cp is not None:
+        if cp.is_significant:
+            findings.append(
+                f"A nominally significant Pettitt step change was detected at {cp.change_date} "
+                f"(asymptotic p = {_fmt_p(cp.p_value)}, not corrected for serial dependence): "
+                f"the average level moved from "
+                f"{cp.level_before:.3f} to {cp.level_after:.3f} {unit} ({cp.shift:+.3f})."
+            )
+        else:
+            findings.append(
+                f"No nominally significant Pettitt change point was detected (asymptotic p = "
+                f"{_fmt_p(cp.p_value)})."
+            )
+
+    if rec.highest_years and rec.lowest_years:
+        findings.append(
+            f"Highest annual value: {rec.highest_years[0].value:.3f} {unit} in "
+            f"{rec.highest_years[0].label}; lowest: {rec.lowest_years[0].value:.3f} {unit} in "
+            f"{rec.lowest_years[0].label}."
+        )
+    if rec.latest_year is not None and rec.latest_rank_high is not None:
+        findings.append(
+            f"The latest complete year ({rec.latest_year}) ranks {rec.latest_rank_high} of "
+            f"{rec.n_years} for the highest value (1 = highest)."
+        )
+
     findings.append(f"Dataset provenance: {meta['source']}, nearest grid cell to the chosen point.")
     findings.append(
         "Statistical significance describes the observed record; it does not by itself "
@@ -117,6 +163,7 @@ def build_limitations(meta: Dict[str, Any], st: StatisticalResult) -> List[str]:
         "not station measurements.",
         "Confidence intervals assume independent errors and may be somewhat narrow "
         "when serial correlation is present.",
+        "The Pettitt change-point p-value is an asymptotic approximation that assumes independent observations; serial correlation can inflate false detections. Treat it as exploratory, not autocorrelation-corrected.",
     ]
     if st.resolution == "annual":
         notes.append("Annual means use only years with all 12 months valid.")
@@ -129,15 +176,31 @@ def _num(value: Any) -> Any:
     return None if pd.isna(value) else float(value)
 
 
+async def _analyse(
+    dataset_id: str, lat: float, lon: float, start: int, end: int, resolution: str
+) -> Tuple[Dict[str, Any], pd.DataFrame, Dict[str, Any]]:
+    meta = NasaPowerService.get_meta(dataset_id)
+    df = await NasaPowerService.fetch_time_series(dataset_id, lat, lon, start, end)
+    return meta, df, compute_trend_analysis(df, resolution)
+
+
+async def _labelled(label: str, req: AnalysisRequest) -> InvestigationResponse:
+    try:
+        return await AnalysisService.run_investigation(req)
+    except InsufficientDataError as exc:
+        raise InsufficientDataError(f"{label}: {exc}") from exc
+
+
 class AnalysisService:
     @staticmethod
     async def run_investigation(req: AnalysisRequest) -> InvestigationResponse:
-        meta = NasaPowerService.get_meta(req.dataset_id)
-        df = await NasaPowerService.fetch_time_series(
-            req.dataset_id, req.lat, req.lon, req.start_year, req.end_year
+        meta, df, analysis = await _analyse(
+            req.dataset_id, req.lat, req.lon, req.start_year, req.end_year, req.temporal_resolution
         )
-        analysis = compute_trend_analysis(df, req.temporal_resolution)
         statistics = StatisticalResult(**analysis["statistics"])
+        change_point = ChangePointResult(**analysis["change_point"]) if analysis["change_point"] else None
+        records = RecordsResult(**compute_records(df))
+        quality = DataQuality(**assess_quality(df, req.start_year, req.end_year, meta))
         processed: pd.DataFrame = analysis["processed_df"]
 
         points = [
@@ -160,9 +223,88 @@ class AnalysisService:
             unit=meta["unit"],
             time_period=f"{req.start_year}-{req.end_year}",
             data_source=meta["source"],
-            key_findings=build_findings(meta, place, req, statistics),
+            key_findings=build_findings(meta, place, req, statistics, change_point, records),
             statistics=statistics,
+            change_point=change_point,
+            records=records,
+            data_quality=quality,
             time_series=points,
             seasonal_insights=build_seasonal_insights(df, req.lat),
             limitations=build_limitations(meta, statistics),
+        )
+
+    @staticmethod
+    async def run_comparison(req: CompareRequest) -> CompareResponse:
+        def make(place) -> AnalysisRequest:
+            return AnalysisRequest(
+                dataset_id=req.dataset_id,
+                lat=place.lat,
+                lon=place.lon,
+                start_year=req.start_year,
+                end_year=req.end_year,
+                temporal_resolution=req.temporal_resolution,
+                location_name=place.name or f"{place.lat:.2f}°, {place.lon:.2f}°",
+            )
+
+        a, b = await asyncio.gather(
+            _labelled("Place A", make(req.place_a)), _labelled("Place B", make(req.place_b))
+        )
+
+        def pack(r: InvestigationResponse) -> Dict[str, Any]:
+            return {
+                "name": r.location_name,
+                "sen_slope": r.statistics.sen_slope,
+                "sen_slope_ci": r.statistics.sen_slope_ci,
+                "is_significant": r.statistics.is_significant,
+                "dates": [p.date for p in r.time_series],
+                "anomalies": [p.anomaly for p in r.time_series],
+            }
+
+        summary = compare_series(pack(a), pack(b), a.unit)
+        return CompareResponse(a=a, b=b, comparison=CompareSummary(**summary))
+
+    @staticmethod
+    async def run_correlation(req: CorrelationRequest) -> CorrelationResponse:
+        if req.dataset_x == req.dataset_y:
+            raise InsufficientDataError("Choose two different variables to correlate.")
+        (mx, dfx, ax), (my, dfy, ay) = await asyncio.gather(
+            _analyse(req.dataset_x, req.lat, req.lon, req.start_year, req.end_year, req.temporal_resolution),
+            _analyse(req.dataset_y, req.lat, req.lon, req.start_year, req.end_year, req.temporal_resolution),
+        )
+        px = ax["processed_df"][["date", "anomaly"]].rename(columns={"anomaly": "x"})
+        py = ay["processed_df"][["date", "anomaly"]].rename(columns={"anomaly": "y"})
+        merged = px.merge(py, on="date", how="inner").sort_values("date").reset_index(drop=True)
+        result = correlate(
+            merged["x"].to_numpy(dtype=float),
+            merged["y"].to_numpy(dtype=float),
+            decimal_year(merged["date"]),
+        )
+
+        place = req.location_name or f"{req.lat:.2f}°, {req.lon:.2f}°"
+        return CorrelationResponse(
+            location_name=place,
+            lat=req.lat,
+            lon=req.lon,
+            x_name=mx["name"],
+            x_unit=mx["unit"],
+            y_name=my["name"],
+            y_unit=my["unit"],
+            time_period=f"{req.start_year}-{req.end_year}",
+            resolution=req.temporal_resolution,
+            interpretation=interpret(result, mx["name"], my["name"], req.temporal_resolution),
+            points=[
+                CorrelationPoint(date=row.date.strftime("%Y-%m-%d"), x=float(row.x), y=float(row.y))
+                for row in merged.itertuples(index=False)
+            ],
+            limitations=[
+                "Both series are analysed as anomalies (deseasonalised, or annual means), so "
+                "the seasonal cycle cannot create a correlation.",
+                "Reanalysis variables are produced by the same model, so some relationships "
+                "partly reflect how the model links them.",
+                mx["limitation"],
+                my["limitation"],
+            ],
+            quality_x=DataQuality(**assess_quality(dfx, req.start_year, req.end_year, mx)),
+            quality_y=DataQuality(**assess_quality(dfy, req.start_year, req.end_year, my)),
+            **result,
         )

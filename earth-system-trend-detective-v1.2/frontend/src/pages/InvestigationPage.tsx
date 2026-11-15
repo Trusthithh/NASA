@@ -11,11 +11,13 @@ import {
 } from "../types/science";
 import { EarthGlobe } from "../components/Globe/EarthGlobe";
 import { LocationSearch } from "../components/Search/LocationSearch";
+import { HotspotPicker } from "../components/Hotspots/HotspotPicker";
+import { Hotspot } from "../data/hotspots";
 import { InvestigationReport } from "../components/Reports/InvestigationReport";
 import { ResearchAssistant } from "../components/Assistant/ResearchAssistant";
 import { useSelectedLocation } from "../context/LocationContext";
 import { SelectedLocation, formatCoords } from "../utils/geo";
-import { btnPrimary, card, container, input, label, page } from "../styles/ui";
+import { btnPrimary, card, container, input, label, page, subCard } from "../styles/ui";
 
 const DEFAULT_LOCATION: SelectedLocation = { lat: 30.04, lon: 31.23, name: "Cairo" };
 
@@ -43,9 +45,12 @@ export const InvestigationPage: React.FC = () => {
   const [latText, setLatText] = useState(String(initial.lat));
   const [lonText, setLonText] = useState(String(initial.lon));
   const [placeName, setPlaceName] = useState(initial.name);
+  const [story, setStory] = useState<string | null>(
+    shared && shared.lat === initial.lat && shared.lon === initial.lon ? shared.story ?? null : null
+  );
 
   const [datasets, setDatasets] = useState<DatasetInfo[]>([]);
-  const [datasetId, setDatasetId] = useState(searchParams.get("dataset") ?? "temperature");
+  const [datasetId, setDatasetId] = useState(searchParams.get("dataset") ?? "skin_temperature");
   const [startYear, setStartYear] = useState(1990);
   const [endYear, setEndYear] = useState(2020);
   const [resolution, setResolution] = useState<Resolution>("annual");
@@ -58,29 +63,37 @@ export const InvestigationPage: React.FC = () => {
   const abortRef = useRef<AbortController | null>(null);
   const initialRunDone = useRef(false);
   const info = datasets.find((d) => d.id === datasetId);
+  const categories = Array.from(new Set(datasets.map((d) => d.category)));
 
   const lat = parseCoord(latText, -90, 90);
   const lon = parseCoord(lonText, -180, 180);
   const markerPoint = lat !== null && lon !== null ? { lat, lon } : null;
 
-  const runAnalysis = async (override?: SelectedLocation) => {
+  const runAnalysis = async (override?: SelectedLocation, datasetOverride?: string) => {
     const useLat = override ? override.lat : lat;
     const useLon = override ? override.lon : lon;
     if (useLat === null || useLon === null) {
       setError("Enter a latitude between -90 and 90 and a longitude between -180 and 180.");
       return;
     }
-    if (startYear > endYear) {
+    // Keep the years inside the chosen variable's window (e.g. solar starts in 1984).
+    const targetId = datasetOverride ?? datasetId;
+    const target = datasets.find((d) => d.id === targetId);
+    const useStart = target ? clamp(startYear, target.start_year, target.end_year) : startYear;
+    const useEnd = target ? clamp(endYear, target.start_year, target.end_year) : endYear;
+    if (useStart !== startYear) setStartYear(useStart);
+    if (useEnd !== endYear) setEndYear(useEnd);
+    if (useStart > useEnd) {
       setError("The start year must not be later than the end year.");
       return;
     }
     const name = override ? override.name : placeName || formatCoords(useLat, useLon);
     const params: AnalysisParams = {
-      dataset_id: datasetId,
+      dataset_id: targetId,
       lat: useLat,
       lon: useLon,
-      start_year: startYear,
-      end_year: endYear,
+      start_year: useStart,
+      end_year: useEnd,
       temporal_resolution: resolution,
       location_name: name,
     };
@@ -95,7 +108,12 @@ export const InvestigationPage: React.FC = () => {
       if (controller.signal.aborted) return;
       setInvestigation(res);
       setAnalysedParams(params);
-      setLocation({ lat: useLat, lon: useLon, name });
+      setLocation({
+        lat: useLat,
+        lon: useLon,
+        name,
+        story: (override ? override.story : story) ?? undefined,
+      });
     } catch (err) {
       if (controller.signal.aborted) return;
       setError(getErrorMessage(err, "Failed to execute the trend analysis."));
@@ -105,11 +123,17 @@ export const InvestigationPage: React.FC = () => {
   };
 
   // A new place from the globe or the search box fills the panel and re-runs the analysis.
-  const applyLocation = (next: SelectedLocation) => {
+  const applyLocation = (next: SelectedLocation, dataset?: string) => {
     setLatText(String(next.lat));
     setLonText(String(next.lon));
     setPlaceName(next.name);
-    void runAnalysis(next);
+    setStory(next.story ?? null);
+    if (dataset) setDatasetId(dataset);
+    void runAnalysis(next, dataset);
+  };
+
+  const handleHotspot = (h: Hotspot) => {
+    applyLocation({ lat: h.lat, lon: h.lon, name: h.name, story: h.story }, h.dataset);
   };
 
   const handleGlobePick = (pickLat: number, pickLon: number) => {
@@ -195,12 +219,26 @@ export const InvestigationPage: React.FC = () => {
               />
             </div>
 
+            <div className="mb-5">
+              <HotspotPicker onSelect={handleHotspot} activeName={placeName} />
+            </div>
+
+            {story && (
+              <div className={`${subCard} mb-5 text-sm leading-relaxed text-slate-200`}>{story}</div>
+            )}
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className={label} htmlFor="dataset">Variable</label>
                 <select id="dataset" className={input} value={datasetId} onChange={(e) => handleDatasetChange(e.target.value)}>
-                  {datasets.map((d) => (
-                    <option key={d.id} value={d.id}>{d.name}</option>
+                  {categories.map((cat) => (
+                    <optgroup key={cat} label={cat}>
+                      {datasets
+                        .filter((d) => d.category === cat)
+                        .map((d) => (
+                          <option key={d.id} value={d.id}>{d.name}</option>
+                        ))}
+                    </optgroup>
                   ))}
                 </select>
               </div>
@@ -213,11 +251,11 @@ export const InvestigationPage: React.FC = () => {
               </div>
               <div>
                 <label className={label} htmlFor="lat">Latitude</label>
-                <input id="lat" className={input} value={latText} onChange={(e) => { setLatText(e.target.value); setPlaceName(""); }} />
+                <input id="lat" className={input} value={latText} onChange={(e) => { setLatText(e.target.value); setPlaceName(""); setStory(null); }} />
               </div>
               <div>
                 <label className={label} htmlFor="lon">Longitude</label>
-                <input id="lon" className={input} value={lonText} onChange={(e) => { setLonText(e.target.value); setPlaceName(""); }} />
+                <input id="lon" className={input} value={lonText} onChange={(e) => { setLonText(e.target.value); setPlaceName(""); setStory(null); }} />
               </div>
               <div>
                 <label className={label} htmlFor="start">Start year</label>

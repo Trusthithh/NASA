@@ -31,7 +31,16 @@ export const ResearchAssistant: React.FC<ResearchAssistantProps> = ({ params, lo
           "significance, trend magnitude, or limitations of these findings.",
       },
     ]);
-  }, [params, locationName]);
+  }, [
+    params.dataset_id,
+    params.lat,
+    params.lon,
+    params.start_year,
+    params.end_year,
+    params.temporal_resolution,
+    params.location_name,
+    locationName,
+  ]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -45,7 +54,9 @@ export const ResearchAssistant: React.FC<ResearchAssistantProps> = ({ params, lo
     setMessages((prev) => [...prev, { role: "user", content: question }]);
     setLoading(true);
     try {
-      const res = await askAssistant(question, params);
+      // The first assistant message is a UI greeting, not conversational history.
+      const history = messages.slice(1).slice(-8).map(({ role, content }) => ({ role, content }));
+      const res = await askAssistant(question, params, history);
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: res.answer, source: res.sources_cited[0] },

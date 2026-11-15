@@ -2,12 +2,16 @@ import axios from "axios";
 import {
   AnalysisParams,
   AssistantResponse,
+  CompareParams,
+  CompareResponse,
+  CorrelationParams,
+  CorrelationResponse,
   DatasetInfo,
   InvestigationResponse,
   LocationResult,
 } from "../types/science";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
+const API_BASE = import.meta.env.VITE_API_BASE_URL?.trim() || "/api/v1";
 
 export const apiClient = axios.create({
   baseURL: API_BASE,
@@ -52,13 +56,33 @@ export async function runInvestigation(
   return data;
 }
 
+export async function runComparison(
+  params: CompareParams,
+  signal?: AbortSignal
+): Promise<CompareResponse> {
+  const { data } = await apiClient.post<CompareResponse>("/analysis/compare", params, { signal });
+  return data;
+}
+
+export async function runCorrelation(
+  params: CorrelationParams,
+  signal?: AbortSignal
+): Promise<CorrelationResponse> {
+  const { data } = await apiClient.post<CorrelationResponse>("/analysis/correlation", params, {
+    signal,
+  });
+  return data;
+}
+
 export async function askAssistant(
   question: string,
-  analysis: AnalysisParams
+  analysis: AnalysisParams,
+  history: Array<{ role: "user" | "assistant"; content: string }> = []
 ): Promise<AssistantResponse> {
   const { data } = await apiClient.post<AssistantResponse>("/assistant/explain", {
     question,
     analysis,
+    history: history.slice(-8),
   });
   return data;
 }

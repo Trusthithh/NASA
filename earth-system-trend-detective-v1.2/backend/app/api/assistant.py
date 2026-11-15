@@ -26,7 +26,9 @@ async def explain_findings(payload: AssistantRequest):
         raise HTTPException(status_code=500, detail="Internal error while preparing the answer.")
 
     answer, source = await AiResearchAssistant.generate_explanation(
-        payload.question, investigation
+        payload.question,
+        investigation,
+        [turn.model_dump() for turn in payload.history],
     )
     return AssistantResponse(
         answer=answer,

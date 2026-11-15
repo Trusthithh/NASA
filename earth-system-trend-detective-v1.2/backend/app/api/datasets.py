@@ -15,6 +15,7 @@ async def list_datasets():
         DatasetInfo(
             id=ds_id,
             name=meta["name"],
+            category=meta["category"],
             variable=meta["nasa_variable"],
             unit=meta["unit"],
             spatial_resolution="0.5° x 0.625° (~50 km)",

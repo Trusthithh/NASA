@@ -5,6 +5,7 @@ import { LocationProvider } from "./context/LocationContext";
 import { LandingPage } from "./pages/LandingPage";
 import { InvestigationPage } from "./pages/InvestigationPage";
 import { EnvironmentalPage } from "./pages/EnvironmentalPage";
+import { ComparePage } from "./pages/ComparePage";
 
 const NotFound: React.FC = () => (
   <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 text-slate-300">
@@ -25,7 +26,8 @@ export function App() {
             <Routes>
               <Route path="/" element={<LandingPage />} />
               <Route path="/investigate" element={<InvestigationPage />} />
-              <Route path="/environmental" element={<EnvironmentalPage />} />
+              <Route path="/compare" element={<ComparePage />} />
+            <Route path="/environmental" element={<EnvironmentalPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </main>

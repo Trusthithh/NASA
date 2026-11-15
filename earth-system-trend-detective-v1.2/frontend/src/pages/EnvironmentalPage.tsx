@@ -10,9 +10,9 @@ const challenges = [
     description:
       "Long-term rise in average surface air temperature. Scientific assessments attribute " +
       "most observed global warming to human greenhouse-gas emissions.",
-    indicator: "MERRA-2 2 m Surface Air Temperature",
+    indicator: "MERRA-2 Earth Skin Temperature",
     action: "Support decarbonisation and the transition to renewable energy.",
-    dataset: "temperature",
+    dataset: "skin_temperature",
   },
   {
     title: "Water Stress & Drought",

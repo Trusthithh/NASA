@@ -2,6 +2,8 @@ export interface SelectedLocation {
   lat: number;
   lon: number;
   name: string;
+  story?: string; // set when the place is a one-click hotspot
+  dataset?: string; // recommended variable for that hotspot
 }
 
 export function formatCoords(lat: number, lon: number): string {
@@ -14,6 +16,7 @@ export function investigateUrl(loc: SelectedLocation, dataset?: string): string 
     lon: String(loc.lon),
     name: loc.name,
   });
-  if (dataset) qs.set("dataset", dataset);
+  const chosen = dataset ?? loc.dataset;
+  if (chosen) qs.set("dataset", chosen);
   return `/investigate?${qs.toString()}`;
 }

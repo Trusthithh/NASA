@@ -21,6 +21,7 @@ ALPHA = 0.05
 COMPLETE_YEAR_MONTHS = 12
 MIN_ANNUAL_POINTS = 10
 MIN_MONTHLY_POINTS = 60
+MIN_CHANGE_SEGMENT = 10
 
 
 class InsufficientDataError(ValueError):
@@ -32,7 +33,11 @@ def decimal_year(dates: pd.Series) -> np.ndarray:
 
 
 def build_annual_series(obs: pd.DataFrame) -> pd.DataFrame:
-    grouped = obs.groupby(obs["date"].dt.year)["value"].agg(["mean", "count"])
+    # Collapse duplicate monthly timestamps before testing for exactly 12 months.
+    clean = obs.dropna(subset=["value"]).copy()
+    clean["date"] = pd.to_datetime(clean["date"]).dt.to_period("M").dt.to_timestamp()
+    clean = clean.groupby("date", as_index=False)["value"].mean()
+    grouped = clean.groupby(clean["date"].dt.year)["value"].agg(["mean", "count"])
     complete = grouped[grouped["count"] == COMPLETE_YEAR_MONTHS]
     return pd.DataFrame(
         {
@@ -67,6 +72,66 @@ def autocorrelation_diagnostics(
     except Exception:
         return False, lag1_out, None
     return lb_p < ALPHA, lag1_out, lb_p
+
+
+def pettitt_test(y: np.ndarray) -> Dict[str, float]:
+    """Pettitt (1979) rank-based single change-point statistic.
+
+    ``index`` is the final observation in the first segment. The commonly used
+    exponential p-value is asymptotic and assumes independent observations; it
+    is therefore reported as a nominal approximation for serially dependent
+    environmental time series, not as an autocorrelation-corrected p-value.
+    """
+    values = np.asarray(y, dtype=float)
+    if values.ndim != 1 or len(values) < 2 or not np.isfinite(values).all():
+        raise ValueError("Pettitt test requires at least two finite one-dimensional values")
+    n = len(values)
+    # U_t = sum_j sign(x_t - x_j), accumulated through each candidate split.
+    signs = np.sign(values[:, None] - values[None, :])
+    u = np.cumsum(signs.sum(axis=1))
+    magnitude = np.abs(u)
+    index = int(np.argmax(magnitude))
+    k = float(magnitude[index])
+    p_value = float(min(1.0, 2.0 * np.exp(-6.0 * k**2 / (n**3 + n**2))))
+    return {"index": index, "k": k, "p_value": p_value}
+
+
+def detect_change_point(
+    series: pd.DataFrame, y: np.ndarray, resolution: str = "annual"
+) -> Optional[Dict[str, Any]]:
+    """Detect a single shift, requiring at least ten observations per segment.
+
+    Monthly results are dated to the detected month (not just the calendar
+    year). Their Pettitt p-value remains nominal because monthly environmental
+    observations can be serially dependent.
+    """
+    n = len(y)
+    if n < 2 * MIN_CHANGE_SEGMENT:
+        return None
+    result = pettitt_test(y)
+    first_new = result["index"] + 1
+    if first_new < MIN_CHANGE_SEGMENT or n - first_new < MIN_CHANGE_SEGMENT:
+        return None
+    overall = float(series["value"].mean())
+    before = series["anomaly"].iloc[:first_new]
+    after = series["anomaly"].iloc[first_new:]
+    level_before = overall + float(before.mean())
+    level_after = overall + float(after.mean())
+    date = series["date"].iloc[first_new]
+    return {
+        "change_date": date.strftime("%Y-%m-%d"),
+        "change_year": int(date.year),
+        "change_month": int(date.month),
+        "resolution": resolution,
+        "p_value": result["p_value"],
+        "is_significant": bool(result["p_value"] < ALPHA),
+        "level_before": level_before,
+        "level_after": level_after,
+        "shift": level_after - level_before,
+        "n_before": int(len(before)),
+        "n_after": int(len(after)),
+        "method": "Pettitt test (nominal asymptotic p-value; serial dependence not corrected)",
+    }
 
 
 def _flat_statistics(n: int, resolution: str) -> Dict[str, Any]:
@@ -140,7 +205,14 @@ def compute_trend_analysis(df: pd.DataFrame, resolution: str = "annual") -> Dict
     if resolution not in ("annual", "monthly"):
         raise ValueError("resolution must be 'annual' or 'monthly'")
 
-    obs = df.dropna(subset=["value"]).sort_values("date").reset_index(drop=True)
+    obs = df.dropna(subset=["value"]).copy()
+    obs["date"] = pd.to_datetime(obs["date"]).dt.to_period("M").dt.to_timestamp()
+    obs = (
+        obs.groupby("date", as_index=False)["value"]
+        .mean()
+        .sort_values("date")
+        .reset_index(drop=True)
+    )
 
     if resolution == "annual":
         series = build_annual_series(obs)
@@ -163,9 +235,11 @@ def compute_trend_analysis(df: pd.DataFrame, resolution: str = "annual") -> Dict
     scale = max(1.0, float(np.abs(series["value"]).max()))
     if float(np.ptp(y)) < 1e-9 * scale:
         statistics, slope, intercept = _flat_statistics(len(series), resolution), 0.0, 0.0
+        change_point = None
     else:
         statistics, slope, intercept = _fit(x, y, resolution)
+        change_point = detect_change_point(series, y, resolution)
 
     series["trend_value"] = series["climatology"] + intercept + slope * x
     processed = series[["date", "value", "trend_value", "anomaly"]].copy()
-    return {"statistics": statistics, "processed_df": processed}
+    return {"statistics": statistics, "processed_df": processed, "change_point": change_point}

@@ -60,3 +60,19 @@ def test_constant_series_is_stable():
     out = compute_trend_analysis(df, "monthly")
     assert out["statistics"]["trend_direction"] == "stable"
     assert out["statistics"]["p_value"] == 1.0
+
+
+def test_duplicate_months_do_not_make_a_year_incomplete():
+    df = make_monthly(1990, 2005)
+    df = pd.concat([df, df.iloc[[0]]], ignore_index=True)
+    out = compute_trend_analysis(df, "annual")
+    assert out["statistics"]["n_observations"] == 16
+
+
+def test_edge_missing_months_remain_missing_and_are_not_zero_filled():
+    df = make_monthly(1990, 2020)
+    df.loc[df.index[:4], "value"] = np.nan
+    df.loc[df.index[-4:], "value"] = np.nan
+    out = compute_trend_analysis(df, "monthly")
+    assert out["processed_df"]["value"].notna().all()
+    assert (out["processed_df"]["value"] > 0).all()

@@ -1,10 +1,18 @@
 import logging
+import sys
 import time
 from collections import defaultdict, deque
+from pathlib import Path
 from threading import Lock
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+# Vercel runs this entrypoint from the monorepo root; local development runs it
+# from backend/. Make the backend package importable in either environment.
+backend_root = str(Path(__file__).resolve().parents[1])
+if backend_root not in sys.path:
+    sys.path.insert(0, backend_root)
 
 from app.api import analysis, assistant, datasets, locations
 from app.config import settings

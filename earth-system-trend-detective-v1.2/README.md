@@ -31,9 +31,11 @@ With the backend running on port 8000, the Vite development server proxies
 
 Deploy the backend and frontend together as one Vercel project. Set the project
 root directory to `earth-system-trend-detective-v1.2`, where `vercel.json`
-builds the FastAPI backend and Vite frontend. Requests under `/api/` route to
-FastAPI; all other paths route to the frontend. The frontend's `vercel.json`
-rewrites app routes to `index.html`, so deep links such as `/investigate` work.
+builds the FastAPI backend and Vite frontend. The root `requirements.txt`
+includes the backend's Python dependencies for Vercel. Requests under `/api/`
+route to FastAPI; all other paths route to the frontend. The frontend's
+`vercel.json` rewrites app routes to `index.html`, so deep links such as
+`/investigate` work.
 Leave `VITE_API_BASE_URL` unset so the browser uses the same-origin `/api/v1`
 route. Add `GEMINI_API_KEY` to the project environment variables only if you
 want the assistant enabled.

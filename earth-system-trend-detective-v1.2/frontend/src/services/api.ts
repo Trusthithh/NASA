@@ -12,6 +12,8 @@ import {
 } from "../types/science";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL?.trim() || "/api/v1";
+const INVALID_DATASET_RESPONSE =
+  "The backend returned an invalid dataset response. Check Vercel deployment protection and the /api/v1/datasets route.";
 
 export const apiClient = axios.create({
   baseURL: API_BASE,
@@ -33,7 +35,26 @@ export function getErrorMessage(err: unknown, fallback: string): string {
       if (first?.msg) return first.msg;
     }
   }
+  if (err instanceof Error && err.message) return err.message;
   return fallback;
+}
+
+function isDatasetInfo(value: unknown): value is DatasetInfo {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const dataset = value as Record<string, unknown>;
+  return (
+    typeof dataset.id === "string" &&
+    typeof dataset.name === "string" &&
+    typeof dataset.category === "string" &&
+    typeof dataset.variable === "string" &&
+    typeof dataset.unit === "string" &&
+    typeof dataset.spatial_resolution === "string" &&
+    typeof dataset.temporal_resolution === "string" &&
+    typeof dataset.start_year === "number" &&
+    typeof dataset.end_year === "number" &&
+    typeof dataset.description === "string" &&
+    typeof dataset.limitation === "string"
+  );
 }
 
 export async function searchLocations(query: string): Promise<LocationResult[]> {
@@ -44,8 +65,15 @@ export async function searchLocations(query: string): Promise<LocationResult[]> 
 }
 
 export async function fetchDatasets(): Promise<DatasetInfo[]> {
-  const { data } = await apiClient.get<DatasetInfo[]>("/datasets");
-  return data;
+  const { data } = await apiClient.get<unknown>("/datasets");
+  if (!Array.isArray(data)) {
+    throw new Error(INVALID_DATASET_RESPONSE);
+  }
+  const datasets = data.filter(isDatasetInfo);
+  if (datasets.length !== data.length) {
+    throw new Error(INVALID_DATASET_RESPONSE);
+  }
+  return datasets;
 }
 
 export async function runInvestigation(

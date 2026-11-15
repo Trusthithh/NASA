@@ -15,12 +15,24 @@
   ],
   "routes": [
     {
+      "src": "/health",
+      "dest": "backend/app/main.py"
+    },
+    {
       "src": "/api/(.*)",
       "dest": "backend/app/main.py"
     },
     {
+      "src": "/assets/(.*)",
+      "dest": "frontend/assets/$1"
+    },
+    {
+      "src": "/textures/(.*)",
+      "dest": "frontend/textures/$1"
+    },
+    {
       "src": "/(.*)",
-      "dest": "frontend/$1"
+      "dest": "frontend/index.html"
     }
   ]
 }

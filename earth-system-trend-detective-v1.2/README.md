@@ -29,22 +29,14 @@ With the backend running on port 8000, the Vite development server proxies
 
 ## Deployment
 
-- Deploy the backend on Render or Railway with root directory
-  `earth-system-trend-detective-v1.2/backend`, build command
-  `pip install -r requirements.txt`, start command
-  `uvicorn app.main:app --host 0.0.0.0 --port $PORT`, and health check `/health`.
-  Set `PYTHON_VERSION` to `3.11` or newer. Set `CORS_ORIGINS` to the exact public
-  frontend origin, such as `https://your-site.vercel.app`. For Vercel previews,
-  optionally set `CORS_ORIGIN_REGEX` to `https://.*\.vercel\.app`. Add
-  `GEMINI_API_KEY` here only if you want the assistant enabled; never put it in
-  frontend environment variables.
-- Deploy the frontend on Vercel with root directory
-  `earth-system-trend-detective-v1.2/frontend`, build command `npm run build`,
-  and output directory `dist`. Add the Vercel environment variable
-  `VITE_API_BASE_URL` with the backend URL ending in `/api/v1`, for example
-  `https://your-api.onrender.com/api/v1`, then redeploy. Vite's `/api` proxy is
-  for local development only. `vercel.json` rewrites app routes to `index.html`
-  so deep links such as `/investigate` work.
+Deploy the backend and frontend together as one Vercel project. Set the project
+root directory to `earth-system-trend-detective-v1.2`, where `vercel.json`
+builds the FastAPI backend and Vite frontend. Requests under `/api/` route to
+FastAPI; all other paths route to the frontend. The frontend's `vercel.json`
+rewrites app routes to `index.html`, so deep links such as `/investigate` work.
+Leave `VITE_API_BASE_URL` unset so the browser uses the same-origin `/api/v1`
+route. Add `GEMINI_API_KEY` to the project environment variables only if you
+want the assistant enabled.
 
 ## Variables (8)
 

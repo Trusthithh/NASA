@@ -45,15 +45,6 @@ export function vectorToLatLon(v: THREE.Vector3): GlobePoint {
   return { lat: Math.asin(v.y / r) / DEG, lon: Math.atan2(-v.z, v.x) / DEG };
 }
 
-function hasWebGL(): boolean {
-  try {
-    const canvas = document.createElement("canvas");
-    return Boolean(canvas.getContext("webgl2") || canvas.getContext("webgl"));
-  } catch {
-    return false;
-  }
-}
-
 function loadTexture(url: string): Promise<THREE.Texture> {
   return new Promise((resolve, reject) => {
     const loader = new THREE.TextureLoader();
@@ -280,7 +271,6 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   heightClass = "h-[500px] lg:h-[600px]",
   distance = 7.5,
 }) => {
-  const webgl = useMemo(() => hasWebGL(), []);
   const hoverRef = useRef<HTMLSpanElement>(null);
 
   const handleHover = useCallback((p: GlobePoint | null) => {
@@ -289,12 +279,13 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
     }
   }, []);
 
-  if (!webgl) return <GlobeUnavailable heightClass={heightClass} />;
-
   return (
     <div className={`relative w-full ${heightClass} ${onPick ? "cursor-crosshair" : "cursor-grab"}`}>
       <GlobeBoundary fallback={<GlobeUnavailable heightClass={heightClass} />}>
-        <Canvas camera={{ position: [0, 0, distance], fov: 45 }}>
+        <Canvas
+          camera={{ position: [0, 0, distance], fov: 45 }}
+          fallback={<GlobeUnavailable heightClass={heightClass} />}
+        >
           <ambientLight intensity={1.15} />
           <directionalLight position={[5, 3, 5]} intensity={2.2} />
           <Stars radius={100} depth={50} count={3000} factor={4} saturation={0} fade />
